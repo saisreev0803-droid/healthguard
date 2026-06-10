@@ -1,0 +1,13 @@
+venv/
+data/health.db
+data/*.csv
+mlruns/
+notebooks/*.png
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.vscode/
+Thumbs.db
+desktop.ini
+mlflow.db

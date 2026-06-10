@@ -185,6 +185,61 @@ def high_risk_patients(limit: int = 10):
         con.close()
 
         return result.to_dict(orient="records")
+# ─────────────────────────────────────────────────────────────────
+# ENDPOINT 5 — Population analytics data
+# ─────────────────────────────────────────────────────────────────
+
+@app.get("/analytics")
+def get_analytics():
+    try:
+        con = duckdb.connect("data/health.db")
+
+        totals = con.execute("""
+            SELECT
+                COUNT(*)                                AS total_patients,
+                ROUND(AVG(p.age), 1)                    AS avg_age,
+                SUM(f.readmitted_30days)                AS total_readmitted,
+                ROUND(AVG(f.num_chronic_conditions), 1) AS avg_conditions
+            FROM features f
+            JOIN patients p ON f.patient_id = p.patient_id
+        """).df().iloc[0].to_dict()
+
+        age_data = con.execute(
+            "SELECT p.age FROM patients p"
+        ).df()["age"].tolist()
+
+        insurance_data = con.execute("""
+            SELECT insurance, COUNT(*) AS count
+            FROM patients GROUP BY insurance
+        """).df().to_dict(orient="records")
+
+        diagnosis_data = con.execute("""
+            SELECT diagnosis, COUNT(*) AS total
+            FROM conditions
+            GROUP BY diagnosis
+            ORDER BY total DESC LIMIT 10
+        """).df().to_dict(orient="records")
+
+        dept_data = con.execute("""
+            SELECT
+                department,
+                COUNT(encounter_id)           AS total_visits,
+                ROUND(AVG(length_of_stay), 1) AS avg_los
+            FROM encounters
+            GROUP BY department
+            ORDER BY avg_los DESC
+        """).df().to_dict(orient="records")
+
+        con.close()
+
+        return {
+            "totals":       totals,
+            "age_data":     age_data,
+            "insurance":    insurance_data,
+            "diagnoses":    diagnosis_data,
+            "departments":  dept_data,
+        }
+
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

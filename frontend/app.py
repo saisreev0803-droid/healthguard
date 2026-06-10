@@ -294,18 +294,10 @@ elif page == "Population Analytics":
     st.markdown("---")
 
     try:
-        con = duckdb.connect("data/health.db")
+        response = requests.get(f"{API_URL}/analytics", timeout=15)
+        data = response.json()
 
-        totals = con.execute("""
-            SELECT
-                COUNT(*)                                AS total_patients,
-                ROUND(AVG(p.age), 1)                    AS avg_age,
-                SUM(f.readmitted_30days)                AS total_readmitted,
-                ROUND(AVG(f.num_chronic_conditions), 1) AS avg_conditions
-            FROM features f
-            JOIN patients p ON f.patient_id = p.patient_id
-        """).df().iloc[0]
-
+        totals = data["totals"]
         t1, t2, t3, t4 = st.columns(4)
         t1.metric("Total Patients",         int(totals["total_patients"]))
         t2.metric("Average Age",            totals["avg_age"])
@@ -316,9 +308,9 @@ elif page == "Population Analytics":
         row1_left, row1_right = st.columns(2)
 
         with row1_left:
-            age_data = con.execute("SELECT p.age FROM patients p").df()
+            age_df = pd.DataFrame({"age": data["age_data"]})
             fig_age = px.histogram(
-                age_data, x="age", nbins=20,
+                age_df, x="age", nbins=20,
                 title="Patient Age Distribution",
                 color_discrete_sequence=["#3498db"],
             )
@@ -326,13 +318,9 @@ elif page == "Population Analytics":
             st.plotly_chart(fig_age, use_container_width=True)
 
         with row1_right:
-            ins_data = con.execute("""
-                SELECT insurance, COUNT(*) AS count
-                FROM patients
-                GROUP BY insurance
-            """).df()
+            ins_df = pd.DataFrame(data["insurance"])
             fig_ins = px.pie(
-                ins_data, names="insurance", values="count",
+                ins_df, names="insurance", values="count",
                 title="Insurance Type Breakdown",
                 color_discrete_sequence=px.colors.qualitative.Set2,
             )
@@ -343,15 +331,9 @@ elif page == "Population Analytics":
         row2_left, row2_right = st.columns(2)
 
         with row2_left:
-            diag_data = con.execute("""
-                SELECT diagnosis, COUNT(*) AS total
-                FROM conditions
-                GROUP BY diagnosis
-                ORDER BY total DESC
-                LIMIT 10
-            """).df()
+            diag_df = pd.DataFrame(data["diagnoses"])
             fig_diag = px.bar(
-                diag_data, x="total", y="diagnosis",
+                diag_df, x="total", y="diagnosis",
                 orientation="h",
                 title="Top 10 Most Common Diagnoses",
                 color="total",
@@ -362,17 +344,9 @@ elif page == "Population Analytics":
             st.plotly_chart(fig_diag, use_container_width=True)
 
         with row2_right:
-            dept_data = con.execute("""
-                SELECT
-                    department,
-                    COUNT(encounter_id)           AS total_visits,
-                    ROUND(AVG(length_of_stay), 1) AS avg_los
-                FROM encounters
-                GROUP BY department
-                ORDER BY avg_los DESC
-            """).df()
+            dept_df = pd.DataFrame(data["departments"])
             fig_dept = px.bar(
-                dept_data, x="department", y="avg_los",
+                dept_df, x="department", y="avg_los",
                 title="Average Length of Stay by Department",
                 color="avg_los",
                 color_continuous_scale="Reds",
@@ -380,8 +354,6 @@ elif page == "Population Analytics":
             )
             fig_dept.update_layout(height=400)
             st.plotly_chart(fig_dept, use_container_width=True)
-
-        con.close()
 
     except Exception as e:
         st.error(f"Could not load analytics: {e}")
